@@ -31,9 +31,10 @@ var BN = require('../crypto/bn');
  * Represents a transaction, a set of inputs and outputs to change ownership of tokens
  *
  * @param {*} serialized
+ * @param {Buffer} bcdGarbage
  * @constructor
  */
-function Transaction(serialized, opts) {
+function Transaction(serialized, opts, bcdGarbage) {
   if (!(this instanceof Transaction)) {
     return new Transaction(serialized);
   }
@@ -41,6 +42,7 @@ function Transaction(serialized, opts) {
   this.outputs = [];
   this._inputAmount = undefined;
   this._outputAmount = undefined;
+  this._bcdGarbage = bcdGarbage || undefined;
 
   if (serialized) {
     if (serialized instanceof Transaction) {
@@ -58,7 +60,8 @@ function Transaction(serialized, opts) {
     this._newTransaction();
   }
 }
-var CURRENT_VERSION = 2;
+var CURRENT_VERSION = 1;
+var MAX_VERSION = 12; // allow building BCH transactions
 var DEFAULT_NLOCKTIME = 0;
 var MAX_BLOCK_SIZE = 1000000;
 
@@ -94,7 +97,7 @@ Transaction.MAXIMUM_EXTRA_SIZE = 4 + 9 + 9 + 4;
  * @return {Transaction}
  */
 Transaction.shallowCopy = function(transaction) {
-  var copy = new Transaction(transaction.toBuffer());
+  var copy = new Transaction(transaction.toBuffer(), undefined, transaction._bcdGarbage);
   return copy;
 };
 
@@ -131,6 +134,14 @@ ioProperty.get = function() {
   return this._getOutputAmount();
 };
 Object.defineProperty(Transaction.prototype, 'outputAmount', ioProperty);
+
+/**
+ * Set a buffer that will be added into to the transaction right after the version number
+ * @param {Buffer} bcdGarbage
+ */
+ Transaction.prototype.setBcdGarbage = function(bcdGarbage) {
+  this._bcdGarbage = bcdGarbage || undefined;
+};
 
 /**
  * Retrieve the little endian hash of the transaction (used for serialization)
@@ -309,6 +320,10 @@ Transaction.prototype.hasWitnesses = function() {
 Transaction.prototype.toBufferWriter = function(writer, noWitness) {
   writer.writeInt32LE(this.version);
 
+  if (this._bcdGarbage != null) {
+    writer.write(this._bcdGarbage);
+  }
+
   var hasWitnesses = this.hasWitnesses();
 
   if (hasWitnesses && !noWitness) {
@@ -350,6 +365,11 @@ Transaction.prototype.fromBufferReader = function(reader) {
   $.checkArgument(!reader.finished(), 'No transaction data received');
 
   this.version = reader.readInt32LE();
+
+  if (this._bcdGarbage != null) {
+    reader.read(this._bcdGarbage.length);
+  }
+
   var sizeTxIns = reader.readVarintNum();
 
   // check for segwit
@@ -1388,7 +1408,7 @@ Transaction.prototype.enableRBF = function() {
 
 Transaction.prototype.setVersion = function(version) {
   $.checkArgument(
-    JSUtil.isNaturalNumber(version) && version <= CURRENT_VERSION,
+    JSUtil.isNaturalNumber(version) && version <= MAX_VERSION,
     'Wrong version number');
   this.version = version;
   return this;
