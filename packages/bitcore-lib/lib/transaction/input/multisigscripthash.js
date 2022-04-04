@@ -115,7 +115,7 @@ MultiSigScriptHashInput.prototype.getSighash = function(transaction, privateKey,
   return hash;
 };
 
-MultiSigScriptHashInput.prototype.getSignatures = function(transaction, privateKey, index, sigtype, hashData, signingMethod) {
+MultiSigScriptHashInput.prototype.getSignatures = function(transaction, privateKey, index, sigtype, hashData, signingMethod, sigid, forceSignWitness) {
   $.checkState(this.output instanceof Output);
   sigtype = sigtype || Signature.SIGHASH_ALL;
   signingMethod = signingMethod || 'ecdsa';
@@ -125,12 +125,12 @@ MultiSigScriptHashInput.prototype.getSignatures = function(transaction, privateK
   _.each(this.publicKeys, function(publicKey) {
     if (publicKey.toString() === privateKey.publicKey.toString()) {
       var signature;
-      if (self.nestedWitness || self.type === Address.PayToWitnessScriptHash) {
+      if (self.nestedWitness || self.type === Address.PayToWitnessScriptHash || forceSignWitness) {
         var scriptCode = self.getScriptCode();
         var satoshisBuffer = self.getSatoshisBuffer();
-        signature = SighashWitness.sign(transaction, privateKey, sigtype, index, scriptCode, satoshisBuffer, signingMethod);
+        signature = SighashWitness.sign(transaction, privateKey, sigtype, index, scriptCode, satoshisBuffer, signingMethod, sigid);
       } else  {
-        signature = Sighash.sign(transaction, privateKey, sigtype, index, self.redeemScript, signingMethod);
+        signature = Sighash.sign(transaction, privateKey, sigtype, index, self.redeemScript, signingMethod, sigid);
       }
       results.push(new TransactionSignature({
         publicKey: privateKey.publicKey,
@@ -145,11 +145,11 @@ MultiSigScriptHashInput.prototype.getSignatures = function(transaction, privateK
   return results;
 };
 
-MultiSigScriptHashInput.prototype.addSignature = function(transaction, signature, signingMethod) {
+MultiSigScriptHashInput.prototype.addSignature = function(transaction, signature, signingMethod, sigid, forceSignWitness) {
   $.checkState(!this.isFullySigned(), 'All needed signatures have already been added');
   $.checkArgument(!_.isUndefined(this.publicKeyIndex[signature.publicKey.toString()]),
                   'Signature has no matching public key');
-  $.checkState(this.isValidSignature(transaction, signature, signingMethod), "Invalid Signature!");
+  $.checkState(this.isValidSignature(transaction, signature, signingMethod, sigid, forceSignWitness), "Invalid Signature!");
   this.signatures[this.publicKeyIndex[signature.publicKey.toString()]] = signature;
   this._updateScript();
   return this;
@@ -216,9 +216,9 @@ MultiSigScriptHashInput.prototype.publicKeysWithoutSignature = function() {
   });
 };
 
-MultiSigScriptHashInput.prototype.isValidSignature = function(transaction, signature, signingMethod) {
+MultiSigScriptHashInput.prototype.isValidSignature = function(transaction, signature, signingMethod, sigid, forceSignWitness) {
   signingMethod = signingMethod || 'ecdsa';
-  if (this.nestedWitness || this.type === Address.PayToWitnessScriptHash) {
+  if (this.nestedWitness || this.type === Address.PayToWitnessScriptHash || forceSignWitness) {
     signature.signature.nhashtype = signature.sigtype;
     var scriptCode = this.getScriptCode();
     var satoshisBuffer = this.getSatoshisBuffer();
@@ -229,7 +229,8 @@ MultiSigScriptHashInput.prototype.isValidSignature = function(transaction, signa
       signature.inputIndex,
       scriptCode,
       satoshisBuffer,
-      signingMethod
+      signingMethod,
+      sigid
     );
   } else {
     // FIXME: Refactor signature so this is not necessary
@@ -240,7 +241,8 @@ MultiSigScriptHashInput.prototype.isValidSignature = function(transaction, signa
       signature.publicKey,
       signature.inputIndex,
       this.redeemScript, 
-      signingMethod
+      signingMethod,
+      sigid
     );
   }
 };

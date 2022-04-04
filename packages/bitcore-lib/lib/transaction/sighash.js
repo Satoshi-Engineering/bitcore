@@ -24,8 +24,9 @@ var BITS_64_ON = 'ffffffffffffffff';
  * @param {number} sighashType the type of the hash
  * @param {number} inputNumber the input index for the signature
  * @param {Script} subscript the script that will be signed
+ * @param {undefined|number} sigid overwrites sigtype for building the "to-sign" buffer, necessary for some alt-coins
  */
-var sighash = function sighash(transaction, sighashType, inputNumber, subscript) {
+var sighash = function sighash(transaction, sighashType, inputNumber, subscript, sigid) {
   var Transaction = require('./transaction');
   var Input = require('./input');
 
@@ -81,7 +82,7 @@ var sighash = function sighash(transaction, sighashType, inputNumber, subscript)
 
   var buf = new BufferWriter()
     .write(txcopy.toBuffer())
-    .writeInt32LE(sighashType)
+    .writeInt32LE(sigid || sighashType)
     .toBuffer();
   var ret = Hash.sha256sha256(buf);
   ret = new BufferReader(ret).readReverse();
@@ -98,12 +99,13 @@ var sighash = function sighash(transaction, sighashType, inputNumber, subscript)
  * @param {number} inputIndex
  * @param {Script} subscript
  * @param {String} signingMethod - method used to sign - 'ecdsa' or 'schnorr' (future signing method)
+ * @param {undefined|number} sigid
  * @return {Signature}
  */
-function sign(transaction, privateKey, sighashType, inputIndex, subscript, signingMethod) {
+function sign(transaction, privateKey, sighashType, inputIndex, subscript, signingMethod, sigid) {
   signingMethod = signingMethod || 'ecdsa';
 
-  let hashbuf = sighash(transaction, sighashType, inputIndex, subscript);
+  let hashbuf = sighash(transaction, sighashType, inputIndex, subscript, sigid);
   let sig; 
   switch (signingMethod) {
     case 'ecdsa':
@@ -128,14 +130,15 @@ function sign(transaction, privateKey, sighashType, inputIndex, subscript, signi
  * @param {number} inputIndex
  * @param {Script} subscript
  * @param {String} signingMethod - method used to sign - 'ecdsa' or 'schnorr'
+ * @param {undefined|number} sigid
  * @return {boolean}
  */
-function verify(transaction, signature, publicKey, inputIndex, subscript, signingMethod) {
+function verify(transaction, signature, publicKey, inputIndex, subscript, signingMethod, sigid) {
   $.checkArgument(!_.isUndefined(transaction), "Transaction Undefined");
   $.checkArgument(!_.isUndefined(signature) && !_.isUndefined(signature.nhashtype), "Signature Undefined");
 
   signingMethod = signingMethod || 'ecdsa';
-  let hashbuf = sighash(transaction, signature.nhashtype, inputIndex, subscript);
+  let hashbuf = sighash(transaction, signature.nhashtype, inputIndex, subscript, sigid);
   let verified = false;
 
   switch (signingMethod) {

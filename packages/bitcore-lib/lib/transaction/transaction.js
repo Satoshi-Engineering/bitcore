@@ -1194,31 +1194,33 @@ Transaction.prototype.removeInput = function(txId, outputIndex) {
  * @param {Array|String|PrivateKey} privateKey
  * @param {number} sigtype
  * @param {String} signingMethod - method used to sign - 'ecdsa' or 'schnorr'
+ * @param {undefined|number} sigid
+ * @param {undefined|boolean} forceSignWitness
  * @return {Transaction} this, for chaining
  */
-Transaction.prototype.sign = function(privateKey, sigtype, signingMethod) {
+Transaction.prototype.sign = function(privateKey, sigtype, signingMethod, sigid, forceSignWitness) {
   $.checkState(this.hasAllUtxoInfo(), 'Not all utxo information is available to sign the transaction.');
   var self = this;
   if (_.isArray(privateKey)) {
     _.each(privateKey, function(privateKey) {
-      self.sign(privateKey, sigtype, signingMethod);
+      self.sign(privateKey, sigtype, signingMethod, sigid, forceSignWitness);
     });
     return this;
   }
-  _.each(this.getSignatures(privateKey, sigtype, signingMethod), function(signature) {
-    self.applySignature(signature, signingMethod);
+  _.each(this.getSignatures(privateKey, sigtype, signingMethod, sigid, forceSignWitness), function(signature) {
+    self.applySignature(signature, signingMethod, sigid, forceSignWitness);
   });
   return this;
 };
 
-Transaction.prototype.getSignatures = function(privKey, sigtype, signingMethod) {
+Transaction.prototype.getSignatures = function(privKey, sigtype, signingMethod, sigid, forceSignWitness) {
   privKey = new PrivateKey(privKey);
   sigtype = sigtype || Signature.SIGHASH_ALL;
   var transaction = this;
   var results = [];
   var hashData = Hash.sha256ripemd160(privKey.publicKey.toBuffer());
   _.each(this.inputs, function forEachInput(input, index) {
-    _.each(input.getSignatures(transaction, privKey, index, sigtype, hashData, signingMethod), function(signature) {
+    _.each(input.getSignatures(transaction, privKey, index, sigtype, hashData, signingMethod, sigid, forceSignWitness), function(signature) {
       results.push(signature);
     });
   });
@@ -1234,10 +1236,12 @@ Transaction.prototype.getSignatures = function(privKey, sigtype, signingMethod) 
  * @param {PublicKey} signature.publicKey
  * @param {Signature} signature.signature
  * @param {String} signingMethod - 'ecdsa' to sign transaction
+ * @param {undefined|number} sigid
+ * @param {undefined|boolean} forceSignWitness
  * @return {Transaction} this, for chaining
  */
-Transaction.prototype.applySignature = function(signature, signingMethod) {
-  this.inputs[signature.inputIndex].addSignature(this, signature, signingMethod);
+Transaction.prototype.applySignature = function(signature, signingMethod, sigid, forceSignWitness) {
+  this.inputs[signature.inputIndex].addSignature(this, signature, signingMethod, sigid, forceSignWitness);
   return this;
 };
 

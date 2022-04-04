@@ -24,8 +24,9 @@ var _ = require('lodash');
  * @param {number} inputNumber the input index for the signature
  * @param {Buffer} scriptCode
  * @param {Buffer} satoshisBuffer
+ * @param {undefined|number} sigid overwrites sigtype for building the "to-sign" buffer, necessary for some alt-coins
  */
-var sighash = function sighash(transaction, sighashType, inputNumber, scriptCode, satoshisBuffer) {
+var sighash = function sighash(transaction, sighashType, inputNumber, scriptCode, satoshisBuffer, sigid) {
   /* jshint maxstatements: 50 */
 
   var hashPrevouts;
@@ -101,7 +102,7 @@ var sighash = function sighash(transaction, sighashType, inputNumber, scriptCode
   writer.writeUInt32LE(transaction.nLockTime);
 
   // Sighash type
-  writer.writeInt32LE(sighashType);
+  writer.writeInt32LE(sigid || sighashType);
 
   return Hash.sha256sha256(writer.toBuffer());
 
@@ -117,14 +118,15 @@ var sighash = function sighash(transaction, sighashType, inputNumber, scriptCode
  * @param {number} inputIndex
  * @param {Script} subscript
  * @param {String} signingMethod - method used to sign - 'ecdsa' or 'schnorr'
+ * @param {undefined|number} sigid
  * @return {Signature}
  */
-function sign(transaction, privateKey, sighashType, inputIndex, scriptCode, satoshisBuffer, signingMethod) {
+function sign(transaction, privateKey, sighashType, inputIndex, scriptCode, satoshisBuffer, signingMethod, sigid) {
   signingMethod = signingMethod || 'ecdsa';
   var sig;
 
   if (signingMethod === 'ecdsa') {
-    let hashbuf = sighash(transaction, sighashType, inputIndex, scriptCode, satoshisBuffer);
+    let hashbuf = sighash(transaction, sighashType, inputIndex, scriptCode, satoshisBuffer, sigid);
     sig = ECDSA.sign(hashbuf, privateKey).set({
       nhashtype: sighashType
     });
@@ -143,15 +145,16 @@ function sign(transaction, privateKey, sighashType, inputIndex, scriptCode, sato
  * @param {number} inputIndex
  * @param {Script} subscript
  * @param {String} signingMethod - method used to sign - 'ecdsa' or 'schnorr' (future signing method)
+ * @param {undefined|number} sigid
  * @return {boolean}
  */
-function verify(transaction, signature, publicKey, inputIndex, scriptCode, satoshisBuffer, signingMethod) {
+function verify(transaction, signature, publicKey, inputIndex, scriptCode, satoshisBuffer, signingMethod, sigid) {
   $.checkArgument(!_.isUndefined(transaction));
   $.checkArgument(!_.isUndefined(signature) && !_.isUndefined(signature.nhashtype));
   signingMethod = signingMethod || 'ecdsa';
 
   if (signingMethod === 'ecdsa') {
-    let hashbuf = sighash(transaction, signature.nhashtype, inputIndex, scriptCode, satoshisBuffer);
+    let hashbuf = sighash(transaction, signature.nhashtype, inputIndex, scriptCode, satoshisBuffer, sigid);
     return ECDSA.verify(hashbuf, signature, publicKey);
   }
   throw new Error("signingMethod not supported ", signingMethod);
